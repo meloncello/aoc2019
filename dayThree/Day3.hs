@@ -1,6 +1,5 @@
-{-# LANGUAGE OverloadedLists #-}
-
-import qualified Data.Set as Set
+import qualified Data.Set as DS
+import Data.Set ((\\))
 
 data Direction
   = R
@@ -9,49 +8,39 @@ data Direction
   | U
   deriving (Eq, Show, Read)
 
-data Line =
-  Line Direction Int
-  deriving (Show, Eq)
+type Line = (Char, Integer)
 
-type Position = (Int, Int)
+type Position = (Integer, Integer)
 
-type PointSet = Set.Set Position
+type PointSet = DS.Set Position
 
-manhattanDistance :: Position -> Position -> Int
-manhattanDistance (x, y) (x', y') = abs (x - x') + abs (y - y')
-
-cartesianProduct :: [a] -> [b] -> [(a, b)]
-cartesianProduct a b = [(a, b) | a <- a, b <- b]
+manhattanDistance :: Position -> Integer
+manhattanDistance (x, y) = (abs x) + (abs y)
 
 finalPosition :: Position -> Line -> Position
-finalPosition (x, y) (Line R n) = (x + n, y)
-finalPosition (x, y) (Line U n) = (x, y + n)
-finalPosition (x, y) (Line L n) = (x - n, y)
-finalPosition (x, y) (Line D n) = (x, y + n)
+finalPosition (x, y) ('R', n) = (x + n, y)
+finalPosition (x, y) ('U', n) = (x, y + n)
+finalPosition (x, y) ('L', n) = (x - n, y)
+finalPosition (x, y) ('D', n) = (x, y - n)
 
 linePoints :: Position -> Position -> PointSet
-linePoints (x0, y0) (x', y') = Set.cartesianProduct xSet ySet
+linePoints (x0, y0) (x', y') = DS.cartesianProduct xSet ySet
   where
-    makeSeq a b =
-      if a <= b
-        then Set.fromDescList [b .. a]
-        else Set.fromAscList [a .. b]
+    makeSeq a b
+      | a == b = DS.singleton a
+      | a > b = DS.fromAscList [a .. b]
+      | otherwise = DS.fromAscList [a .. b]
     xSet = makeSeq x0 x'
     ySet = makeSeq y0 y'
 
-getIntersections :: [Line] -> PointSet
-getIntersections (l:ls) =
-  let end = finalPosition (0, 0) l
-   in iter ls (linePoints (0, 0) end) Set.empty end
+buildPath :: [Line] -> PointSet
+buildPath list = iter list (0, 0) DS.empty
   where
-    iter [] _ int _ = int
-    iter (l:ls) acc intersections newOrigin =
-      let end = finalPosition newOrigin l
-          line = linePoints newOrigin end
-          int =
-            line `Set.intersection`
-            (acc `Set.difference` Set.singleton newOrigin)
-       in iter ls (acc `Set.union` line) (intersections `Set.union` int) end
+    iter [] _ acc = acc
+    iter (x:xs) origin acc =
+      let end = finalPosition origin x
+          line = linePoints origin end
+       in iter xs end (acc `DS.union` line)
 
 split :: Char -> String -> [String]
 split _ [] = [""]
@@ -61,33 +50,24 @@ split c (x:xs)
   where
     rest = split c xs
 
-separate :: [String] -> [(String, String)]
-separate lst = reverse $ foldl (\acc (x:xs) -> (x : "", xs) : acc) [] lst
-
-convert :: [(String, String)] -> [Line]
-convert [] = []
-convert ((d, l):xs) = (Line (readD d) (readN l)) : (convert xs)
+convert :: [String] -> [Line]
+convert lst = reverse $ foldl (\acc (x:xs) -> (x, readN xs) : acc) [] lst
   where
-    readD :: String -> Direction
-    readD = read
-    readN :: String -> Int
+    readN :: String -> Integer
     readN = read
 
-getInput :: String -> IO String
-getInput input = do
-  text <- readFile input
-  let lined = lines text
-      output = foldl (++) [] lined
-  pure output
+parse :: String -> ([Line], [Line])
+parse input =
+  let [a, b] = fmap (convert . (split ',')) $ lines input
+   in (a, b)
 
 main :: IO ()
 main = do
-  aaa <- readFile "input"
-  input <- getInput "input"
-  let splitted = split ',' input
-      separated = separate splitted
-      converted = convert separated
-      intersections = getIntersections converted
-      closest = Set.findMin intersections
-      distance = manhattanDistance (0, 0) closest
-  print separated
+  input <- readFile "input"
+  let (first, second) = parse input
+      firstPath = buildPath first
+      secondPath = buildPath second
+      intersections =
+        firstPath `DS.intersection` firstPath \\ DS.singleton (0, 0)
+      distance = DS.findMin $ DS.map manhattanDistance intersections
+  print distance
